@@ -1,0 +1,181 @@
+import { FC, MouseEvent, useEffect, useState } from "react";
+import { BSON } from "realm-web";
+import CloseIcon from "../assets/svg/CloseIcon";
+import { IUser } from "../models/user.interface";
+import { app, credentials } from "../utils/mongo.client";
+import LoadingSpinner from "./loadingSpinner";
+import { toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+toast.configure();
+
+export interface IModal {
+  isOpen: boolean;
+  isEdit: boolean;
+  closeModal: () => void;
+  setUserValue: (id: string) => void;
+  editingId?: string;
+}
+
+const Modal: FC<IModal> = ({
+  isOpen,
+  isEdit,
+  closeModal,
+  setUserValue,
+  editingId,
+}) => {
+  const [value, setValue] = useState({
+    name: "",
+    location: "",
+    title: "",
+  });
+
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleChange = (e: React.FormEvent<EventTarget>) => {
+    let target = e.target as HTMLInputElement;
+    setValue({ ...value, [target.name]: target.value });
+  };
+
+  const handleModal = (e: MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLDivElement;
+    if (target.classList.contains("open-nav")) {
+      closeModal();
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const user: Realm.User = await app.logIn(credentials);
+    if (isEdit) {
+      const edit: Promise<IUser> = user.functions.editUser(
+        new BSON.ObjectID(editingId).toString(),
+        value.name,
+        value.location,
+        value.title
+      );
+      edit.then((resp) => {
+        toast.success("User Updated Successfully.");
+        setUserValue(resp._id!);
+        setValue({ name: "", location: "", title: "" });
+        closeModal();
+      });
+    } else {
+      const create = user.functions.createUser(
+        value.name,
+        value.location,
+        value.title
+      );
+      create.then((resp) => {
+        toast.success("User Created Successfully.");
+        setUserValue(resp.insertedId);
+        setValue({ name: "", location: "", title: "" });
+        closeModal();
+      });
+    }
+  };
+
+  useEffect(() => {
+    
+    if (isEdit) {
+      setIsLoading(true);
+      const getSingleUser = async () => {
+        const user: Realm.User = await app.logIn(credentials);
+        const getUser: Promise<IUser> = user.functions.getSingleUser(
+          new BSON.ObjectID(editingId).toString()
+        );
+        getUser.then((resp) => {
+          setValue({
+            name: resp.name,
+            location: resp.location,
+            title: resp.title,
+          });
+        });
+        setIsLoading(false);
+      };
+      getSingleUser();
+    }
+    return () => {
+      setValue({ name: "", location: "", title: "" });
+    };
+  }, [isEdit]);
+
+  const render = (
+    <section className="w-11/12 lg:w-1/2 2xl:w-6/12 bg-white flex justify-center items-center mt-5 rounded-lg">
+          <div className="w-11/12 py-8">
+            <h2 className="capitalize text-xl text-gray-500 font-medium mb-4">
+              {isEdit ? "Edit User" : "add user"}
+            </h2>
+            <form onSubmit={handleSubmit}>
+              <fieldset className="mb-4">
+                <label className="block text-sm text-gray-500 capitalize mb-1">
+                  name
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  value={value.name}
+                  onChange={handleChange}
+                  required
+                  className="w-full h-10 border border-gray-500 rounded-sm px-4"
+                />
+              </fieldset>
+              <fieldset className="mb-4">
+                <label className="block text-sm text-gray-500 capitalize mb-1">
+                  location
+                </label>
+                <input
+                  type="text"
+                  name="location"
+                  value={value.location}
+                  onChange={handleChange}
+                  required
+                  className="w-full h-10 border border-gray-500 rounded-sm px-4"
+                />
+              </fieldset>
+              <fieldset className="mb-4">
+                <label className="block text-sm text-gray-500 capitalize mb-1">
+                  title
+                </label>
+                <input
+                  type="text"
+                  name="title"
+                  value={value.title}
+                  onChange={handleChange}
+                  required
+                  className="w-full h-10 border border-gray-500 rounded-sm px-4"
+                />
+              </fieldset>
+              <button className="text-white capitalize px-6 py-2 bg-indigo-900 rounded-md w-full">
+                save
+              </button>
+            </form>
+          </div>
+        </section>
+  );
+
+  return (
+    <div
+      className={`h-screen w-screen bg-indigo-900 bg-opacity-30 z-30 top-0 fixed transform scale-105 transition-all ease-in-out duration-100 ${
+        isOpen ? "block" : "hidden"
+      }`}
+    >
+      <div
+        className="flex flex-col justify-center items-center h-full w-full open-nav"
+        onClick={handleModal}
+      >
+        <div className="flex justify-end w-11/12 lg:w-1/2 2xl:w-6/12">
+          <div
+            role="button"
+            className="cursor-pointer w-6 h-6 rounded-full flex items-center justify-center bg-white"
+            onClick={() => closeModal()}
+          >
+            <CloseIcon />
+          </div>
+        </div>
+        {isLoading ? <LoadingSpinner /> : render} 
+      </div>
+    </div>
+  );
+};
+
+export default Modal;
